@@ -12,6 +12,8 @@ ENV SDK_PKG_LIST="\
 	libblas-dev,\
 	libblas3,\
 	libgfortran5,\
+	libgstreamer1.0-dev,\
+	libgstreamer-plugins-base1.0-dev,\
 	libgstrtspserver-1.0-0,\
 	libgstrtspserver-1.0-dev,\
 	liblapack-dev,\
