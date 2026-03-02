@@ -99,8 +99,19 @@ Docker platform: linux/arm64
 
 ### Launching SDK Docker
 
+Use the helper script:
+
 ```bash
 ./run.sh
+```
+
+This will try to pull `ghcr.io/sima-neat/elxr:<tag>` from GitHub Packages first and fall back to a matching local image if present.
+
+You can also use standard Docker commands directly:
+
+```bash
+docker pull ghcr.io/sima-neat/elxr:latest
+docker run --rm -it --name elxr --privileged -v "$(pwd):/workspace" -w /workspace -v /dev:/dev --pid=host ghcr.io/sima-neat/elxr:latest /bin/bash -l
 ```
 
 > Notes:

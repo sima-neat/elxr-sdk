@@ -47,11 +47,18 @@ fi
 IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
 REMOTE_IMAGE_REF="ghcr.io/${GHCR_OWNER}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-if docker pull "${REMOTE_IMAGE_REF}" >/dev/null 2>&1; then
+echo "Trying GitHub Packages image ${REMOTE_IMAGE_REF}"
+
+if docker pull "${REMOTE_IMAGE_REF}"; then
   IMAGE_REF="${REMOTE_IMAGE_REF}"
   echo "Using GitHub Packages image ${IMAGE_REF}"
-else
+elif docker image inspect "${IMAGE_REF}" >/dev/null 2>&1; then
   echo "GitHub Packages image unavailable, falling back to local image ${IMAGE_REF}"
+else
+  echo "Unable to pull GitHub Packages image ${REMOTE_IMAGE_REF}" >&2
+  echo "Local fallback image ${IMAGE_REF} is also not present." >&2
+  echo "If the GHCR package is private, run: docker login ghcr.io" >&2
+  exit 1
 fi
 
 image_platform="$(docker image inspect "${IMAGE_REF}" --format '{{.Os}}/{{.Architecture}}' 2>/dev/null || true)"
