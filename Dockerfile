@@ -4,25 +4,11 @@ FROM debian:bookworm
 ARG SDK_PKG_LIST
 ARG SDK_GIT_BRANCH=unknown
 ARG SDK_GIT_HASH=nogit
+ARG SDK_SYSROOT_PKG_LIST="libarpack2 libarpack2-dev libblas-dev libblas3 libgfortran5 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstrtspserver-1.0-0 libgstrtspserver-1.0-dev liblapack-dev liblapack3 libopenblas-pthread-dev libopenblas0-pthread libqt5gui5 libsuperlu-dev libsuperlu5"
 ENV SDK_PKG_LIST="\
 	libgrpc-dev,\
 	protobuf-compiler-grpc,\
-	libarpack2,\
-	libarpack2-dev,\
-	libblas-dev,\
-	libblas3,\
-	libgfortran5,\
-	libgstreamer1.0-dev,\
-	libgstreamer-plugins-base1.0-dev,\
-	libgstrtspserver-1.0-0,\
-	libgstrtspserver-1.0-dev,\
-	liblapack-dev,\
-	liblapack3,\
-	libopenblas-pthread-dev,\
-	libopenblas0-pthread,\
-	libqt5gui5,\
-	libsuperlu-dev,\
-	libsuperlu5,\
+	${SDK_SYSROOT_PKG_LIST},\
 	${SDK_PKG_LIST}"
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -98,6 +84,15 @@ RUN export RUSTUP_HOME=/opt/toolchain/rust && \
     rm /tmp/rustup.sh
 
 RUN python3 /opt/bin/simaai_setup_sdk.py modalix 2.0.0 "${SDK_PKG_LIST}"
+
+COPY scripts/install-sysroot-overlay.sh /usr/local/bin/install-sysroot-overlay.sh
+RUN chmod 755 /usr/local/bin/install-sysroot-overlay.sh && \
+    /bin/bash -lc 'set -euo pipefail; \
+      overlay_pkgs=(); \
+      for pkg in ${SDK_SYSROOT_PKG_LIST}; do \
+        overlay_pkgs+=("${pkg}:arm64"); \
+      done; \
+      /usr/local/bin/install-sysroot-overlay.sh /opt/toolchain/aarch64/modalix "${overlay_pkgs[@]}"'
 
 RUN printf 'SDK Version = 2.0.0_Palette_SDK_neat_%s_%s\neLXr Version = 2.0.0_release_neat_%s_%s\n' \
     "${SDK_GIT_BRANCH}" "${SDK_GIT_HASH}" "${SDK_GIT_BRANCH}" "${SDK_GIT_HASH}" \
