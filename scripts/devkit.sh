@@ -261,6 +261,23 @@ export PS1="${_PS1_PREFIX}${DEVKIT_SYNC_ORIG_PS1}"
 export DEVKIT_SYNC_MOUNT_POINT="${_MOUNT_POINT}"
 export DEVKIT_SYNC_DEVKIT_USER="${_DEVKIT_USER}"
 export DEVKIT_SYNC_DEVKIT_PORT="${_DEVKIT_PORT}"
+export SDK_IMAGE_TAG="${SDK_IMAGE_TAG:-version}"
+export SDK_PROMPT_HOSTNAME="${SDK_PROMPT_HOSTNAME:-neat-elxr-${SDK_IMAGE_TAG}}"
+
+__devkit_rewrite_prompt_hostname() {
+  local prompt="${1-}"
+  prompt="${prompt//\\h/${SDK_PROMPT_HOSTNAME}}"
+  prompt="${prompt//\\H/${SDK_PROMPT_HOSTNAME}}"
+  printf '%s' "${prompt}"
+}
+
+if [[ -z "${DEVKIT_SYNC_ORIG_PS1:-}" ]]; then
+  export DEVKIT_SYNC_ORIG_PS1="$(__devkit_rewrite_prompt_hostname "${PS1:-\u@\h:\w\$ }")"
+else
+  export DEVKIT_SYNC_ORIG_PS1="$(__devkit_rewrite_prompt_hostname "${DEVKIT_SYNC_ORIG_PS1}")"
+fi
+
+export PS1="$(__devkit_rewrite_prompt_hostname "${PS1:-${DEVKIT_SYNC_ORIG_PS1}}")"
 
 echo ""
 echo "NFS client mount configured."
@@ -564,17 +581,28 @@ _persist_file="${HOME}/.devkit-sync.rc"
   echo "export DEVKIT_SYNC_MOUNT_POINT='${DEVKIT_SYNC_MOUNT_POINT}'"
   echo "export DEVKIT_SYNC_DEVKIT_USER='${DEVKIT_SYNC_DEVKIT_USER}'"
   echo "export DEVKIT_SYNC_DEVKIT_PORT='${DEVKIT_SYNC_DEVKIT_PORT}'"
+  echo "export SDK_IMAGE_TAG='${SDK_IMAGE_TAG}'"
+  echo "export SDK_PROMPT_HOSTNAME='${SDK_PROMPT_HOSTNAME}'"
   echo "export DEVKIT_PROMPT_DIRTRIM='${DEVKIT_PROMPT_DIRTRIM}'"
   echo 'export PROMPT_DIRTRIM="${DEVKIT_PROMPT_DIRTRIM}"'
   echo 'export DEVKIT_SYNC_PROMPT_PREFIX="\[\e[1;32m\][DevKit ${DEVKIT_SYNC_TARGET}]\[\e[0m\] "'
+  echo '__devkit_rewrite_prompt_hostname() {'
+  echo '  local prompt="${1-}"'
+  echo '  prompt="${prompt//\\h/${SDK_PROMPT_HOSTNAME}}"'
+  echo '  prompt="${prompt//\\H/${SDK_PROMPT_HOSTNAME}}"'
+  echo '  printf "%s" "${prompt}"'
+  echo '}'
   echo '__devkit_apply_prompt() {'
   echo '  local marker="[DevKit ${DEVKIT_SYNC_TARGET}]"'
   echo '  if [[ -z "${DEVKIT_SYNC_ORIG_PS1:-}" ]]; then'
   echo '    if [[ "${PS1:-}" == *"${marker}"* ]]; then'
-  echo '      DEVKIT_SYNC_ORIG_PS1="${PS1#*] }"'
+  echo '      DEVKIT_SYNC_ORIG_PS1="$(__devkit_rewrite_prompt_hostname "${PS1#*] }")"'
   echo '    else'
-  echo '      DEVKIT_SYNC_ORIG_PS1="${PS1:-\u@\h:\w\$ }"'
+  echo '      DEVKIT_SYNC_ORIG_PS1="$(__devkit_rewrite_prompt_hostname "${PS1:-\u@\h:\w\$ }")"'
   echo '    fi'
+  echo '    export DEVKIT_SYNC_ORIG_PS1'
+  echo '  else'
+  echo '    DEVKIT_SYNC_ORIG_PS1="$(__devkit_rewrite_prompt_hostname "${DEVKIT_SYNC_ORIG_PS1}")"'
   echo '    export DEVKIT_SYNC_ORIG_PS1'
   echo '  fi'
   echo '  if [[ "${PS1:-}" != "${DEVKIT_SYNC_PROMPT_PREFIX}"* ]]; then'

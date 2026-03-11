@@ -119,6 +119,32 @@ RUN chmod 755 /usr/local/bin/install-sysroot-overlay.sh && \
       echo "Skipping sysroot overlay for minimal image build"; \
     fi
 
+RUN cat > /etc/profile.d/neat-elxr-prompt.sh <<'EOF'
+#!/usr/bin/env bash
+if [[ $- == *i* ]]; then
+  export SDK_IMAGE_TAG="${SDK_IMAGE_TAG:-version}"
+  export SDK_PROMPT_HOSTNAME="${SDK_PROMPT_HOSTNAME:-neat-elxr-${SDK_IMAGE_TAG}}"
+  _sdk_rewrite_prompt_hostname() {
+    local prompt="${1-}"
+    prompt="${prompt//\\h/${SDK_PROMPT_HOSTNAME}}"
+    prompt="${prompt//\\H/${SDK_PROMPT_HOSTNAME}}"
+    printf '%s' "${prompt}"
+  }
+  if [[ -n "${DEVKIT_SYNC_ORIG_PS1:-}" ]]; then
+    DEVKIT_SYNC_ORIG_PS1="$(_sdk_rewrite_prompt_hostname "${DEVKIT_SYNC_ORIG_PS1}")"
+    export DEVKIT_SYNC_ORIG_PS1
+  fi
+  if [[ -n "${PS1:-}" ]]; then
+    PS1="$(_sdk_rewrite_prompt_hostname "${PS1}")"
+    export PS1
+  fi
+  if declare -F __devkit_apply_prompt >/dev/null 2>&1; then
+    __devkit_apply_prompt
+  fi
+fi
+EOF
+RUN chmod 755 /etc/profile.d/neat-elxr-prompt.sh
+
 RUN printf 'SDK Version = 2.0.0_Palette_SDK_neat_%s_%s\neLXr Version = 2.0.0_release_neat_%s_%s\n' \
     "${SDK_GIT_BRANCH}" "${SDK_GIT_HASH}" "${SDK_GIT_BRANCH}" "${SDK_GIT_HASH}" \
     > /etc/sdk-release

@@ -286,6 +286,7 @@ def main() -> int:
         "-e", f"DEVKIT_HOST_EXPORT_PATH={host_dir}",
         "-e", f"DEVKIT_HOST_PLATFORM={host_os}",
         "-e", f"DEVKIT_SYNC_DEVKIT_IP={args.devkit_ip}",
+        "-e", f"SDK_IMAGE_TAG={args.image_tag}",
         chosen_image,
     ]
 
