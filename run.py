@@ -289,6 +289,9 @@ def main() -> int:
         chosen_image,
     ]
 
+    if host_os.startswith("linux"):
+        docker_cmd[2:2] = ["--network", "host"]
+
     if args.background:
         docker_cmd.insert(2, "-d")
         docker_cmd.insert(3, "--rm")

@@ -79,8 +79,6 @@ RUN apt-get update --allow-releaseinfo-change && \
 # reliably add users with `usermod -a -G docker <user>`.
 RUN getent group docker >/dev/null || groupadd --system docker
 
-RUN curl -fsSL https://docs.sima.ai/_static/tools/sima-cli-installer.sh | bash
-
 RUN if [ "${MINIMAL_IMAGE}" != "1" ]; then \
       export RUSTUP_HOME=/opt/toolchain/rust && \
       export CARGO_HOME=/opt/toolchain/rust && \

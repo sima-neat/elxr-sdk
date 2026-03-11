@@ -70,7 +70,11 @@ ssh-keyscan -H -p "${_DEVKIT_PORT}" "${_DEVKIT_IP}" >> "${HOME}/.ssh/known_hosts
 chmod 600 "${HOME}/.ssh/known_hosts"
 
 echo "Installing/refreshing SSH key for ${_DEVKIT_USER}@${_DEVKIT_IP}"
-timeout --foreground 120 ssh-copy-id -i "${HOME}/.ssh/id_ed25519.pub" -p "${_DEVKIT_PORT}" -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "${_DEVKIT_USER}@${_DEVKIT_IP}"
+if ! timeout --foreground 120 ssh-copy-id -i "${HOME}/.ssh/id_ed25519.pub" -p "${_DEVKIT_PORT}" -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "${_DEVKIT_USER}@${_DEVKIT_IP}"; then
+  echo "Failed to install SSH key for ${_DEVKIT_USER}@${_DEVKIT_IP}:${_DEVKIT_PORT}." >&2
+  echo "Hint: verify the DevKit IP/port, that SSH is running, and that the user is reachable before retrying." >&2
+  return 1
+fi
 
 if [[ "${_DEVKIT_USER}" != "root" ]]; then
   if ! ssh -p "${_DEVKIT_PORT}" -o BatchMode=yes -o ConnectTimeout=8 "${_DEVKIT_USER}@${_DEVKIT_IP}" "sudo -n true" >/dev/null 2>&1; then
@@ -308,7 +312,102 @@ devkit-run() {
   rel="${local_path#/workspace/}"
   remote_path="${DEVKIT_SYNC_MOUNT_POINT}/${rel}"
   pyneat_activate="${DEVKIT_PYNEAT_ACTIVATE:-__NONE__}"
-  local remote_args=("${remote_path}" "${pyneat_activate}" "$@")
+  local host_pwd remote_args arg
+  host_pwd="$(pwd)"
+  remote_args=("${remote_path}" "${pyneat_activate}")
+
+  normalize_devkit_host_path() {
+    local input="$1"
+    local part
+    local -a parts=()
+    local -a normalized_parts=()
+
+    if [[ "${input}" != /* ]]; then
+      input="${host_pwd}/${input}"
+    fi
+
+    IFS='/' read -r -a parts <<< "${input#/}"
+    for part in "${parts[@]}"; do
+      case "${part}" in
+        ""|".")
+          continue
+          ;;
+        "..")
+          if (( ${#normalized_parts[@]} > 0 )); then
+            unset 'normalized_parts[${#normalized_parts[@]}-1]'
+          fi
+          ;;
+        *)
+          normalized_parts+=("${part}")
+          ;;
+      esac
+    done
+
+    if (( ${#normalized_parts[@]} == 0 )); then
+      printf '/\n'
+      return 0
+    fi
+
+    local joined
+    printf -v joined '%s/' "${normalized_parts[@]}"
+    printf '/%s\n' "${joined%/}"
+  }
+
+  map_devkit_arg_path() {
+    local raw="$1"
+    local prefix=""
+    local value="${raw}"
+    local candidate=""
+    local normalized=""
+    local looks_like_path="0"
+
+    case "${raw}" in
+      --*=*)
+        prefix="${raw%%=*}="
+        value="${raw#*=}"
+        ;;
+    esac
+
+    case "${value}" in
+      ""|"-"|--*|http://*|https://*|rtsp://*|rtmp://*|udp://*|tcp://*|file://*)
+        printf '%s\n' "${raw}"
+        return 0
+        ;;
+    esac
+
+    case "${value}" in
+      /*|./*|../*|*/*)
+        looks_like_path="1"
+        ;;
+    esac
+
+    if [[ "${looks_like_path}" == "1" ]]; then
+      normalized="$(normalize_devkit_host_path "${value}")"
+    elif [[ -e "${host_pwd}/${value}" ]]; then
+      normalized="$(normalize_devkit_host_path "${value}")"
+    else
+      printf '%s\n' "${raw}"
+      return 0
+    fi
+
+    if [[ -n "${DEVKIT_RUN_DEBUG:-}" ]]; then
+      printf "%b[DevKit][debug]%b host_pwd=%q raw=%q normalized=%q\n" \
+        "${c_out:-}" "${c_reset:-}" "${host_pwd}" "${raw}" "${normalized}" >&2
+    fi
+
+    case "${normalized}" in
+      /workspace/*)
+        printf '%s%s\n' "${prefix}" "${DEVKIT_SYNC_MOUNT_POINT}/${normalized#/workspace/}"
+        ;;
+      *)
+        printf '%s\n' "${raw}"
+        ;;
+    esac
+  }
+
+  for arg in "$@"; do
+    remote_args+=("$(map_devkit_arg_path "${arg}")")
+  done
 
   local c_out="" c_stderr="" c_reset=""
   if [[ -t 1 ]]; then
@@ -319,6 +418,11 @@ devkit-run() {
 
   printf "%b[DevKit]%b executing remotely on %s@%s:%s -> %s\n" \
     "${c_out}" "${c_reset}" "${DEVKIT_SYNC_DEVKIT_USER}" "${DEVKIT_SYNC_DEVKIT_IP}" "${DEVKIT_SYNC_DEVKIT_PORT}" "${remote_path}"
+  printf "%b[DevKit]%b argv:" "${c_out}" "${c_reset}"
+  for arg in "${remote_args[@]}"; do
+    printf " %q" "${arg}"
+  done
+  printf "\n"
 
   cleanup_remote_target() {
     ssh -p "${DEVKIT_SYNC_DEVKIT_PORT}" \
@@ -462,14 +566,30 @@ _persist_file="${HOME}/.devkit-sync.rc"
   echo "export DEVKIT_SYNC_DEVKIT_PORT='${DEVKIT_SYNC_DEVKIT_PORT}'"
   echo "export DEVKIT_PROMPT_DIRTRIM='${DEVKIT_PROMPT_DIRTRIM}'"
   echo 'export PROMPT_DIRTRIM="${DEVKIT_PROMPT_DIRTRIM}"'
-  echo 'if [[ -z "${DEVKIT_SYNC_ORIG_PS1:-}" ]]; then export DEVKIT_SYNC_ORIG_PS1="${PS1:-\u@\h:\w\$ }"; fi'
-  echo '_PS1_PREFIX="\[\e[1;32m\][DevKit ${DEVKIT_SYNC_TARGET}]\[\e[0m\] "'
-  echo 'export PS1="${_PS1_PREFIX}${DEVKIT_SYNC_ORIG_PS1}"'
+  echo 'export DEVKIT_SYNC_PROMPT_PREFIX="\[\e[1;32m\][DevKit ${DEVKIT_SYNC_TARGET}]\[\e[0m\] "'
+  echo '__devkit_apply_prompt() {'
+  echo '  local marker="[DevKit ${DEVKIT_SYNC_TARGET}]"'
+  echo '  if [[ -z "${DEVKIT_SYNC_ORIG_PS1:-}" ]]; then'
+  echo '    if [[ "${PS1:-}" == *"${marker}"* ]]; then'
+  echo '      DEVKIT_SYNC_ORIG_PS1="${PS1#*] }"'
+  echo '    else'
+  echo '      DEVKIT_SYNC_ORIG_PS1="${PS1:-\u@\h:\w\$ }"'
+  echo '    fi'
+  echo '    export DEVKIT_SYNC_ORIG_PS1'
+  echo '  fi'
+  echo '  if [[ "${PS1:-}" != "${DEVKIT_SYNC_PROMPT_PREFIX}"* ]]; then'
+  echo '    export PS1="${DEVKIT_SYNC_PROMPT_PREFIX}${DEVKIT_SYNC_ORIG_PS1}"'
+  echo '  fi'
+  echo '}'
+  echo '__devkit_apply_prompt'
   declare -f devkit-run
   echo "alias dk='devkit-run'"
 } > "${_persist_file}"
 
 if ! grep -qF 'source ~/.devkit-sync.rc' "${HOME}/.bashrc"; then
+  if [[ -f "${HOME}/.bashrc" && ! -f "${HOME}/.bashrc.pre-devkit-sync.bak" ]]; then
+    cp -p "${HOME}/.bashrc" "${HOME}/.bashrc.pre-devkit-sync.bak"
+  fi
   cat >> "${HOME}/.bashrc" <<'EOF'
 if [ -f ~/.devkit-sync.rc ]; then
   source ~/.devkit-sync.rc
@@ -477,7 +597,25 @@ fi
 EOF
 fi
 
-echo "Persisted DevKit shell helpers to ${_persist_file} (auto-loaded by ~/.bashrc)."
+if [[ ! -f "${HOME}/.bash_profile" ]]; then
+  touch "${HOME}/.bash_profile"
+fi
+
+if [[ -f "${HOME}/.bash_profile" && ! -f "${HOME}/.bash_profile.pre-devkit-sync.bak" ]]; then
+  cp -p "${HOME}/.bash_profile" "${HOME}/.bash_profile.pre-devkit-sync.bak"
+fi
+
+if ! grep -qF '# >>> devkit-sync profile >>>' "${HOME}/.bash_profile"; then
+  cat >> "${HOME}/.bash_profile" <<'EOF'
+# >>> devkit-sync profile >>>
+if [ -f ~/.bashrc ]; then
+  source ~/.bashrc
+fi
+# <<< devkit-sync profile <<<
+EOF
+fi
+
+echo "Persisted DevKit shell helpers to ${_persist_file} (auto-loaded by ~/.bashrc and ~/.bash_profile)."
 
 _c_ok="" _c_rst=""
 if [[ -t 1 ]]; then
