@@ -100,8 +100,6 @@ RUN if [ "${MINIMAL_IMAGE}" != "1" ]; then \
 RUN if [ "${MINIMAL_IMAGE}" != "1" ]; then \
       python3 /opt/bin/simaai_setup_sdk.py modalix 2.0.0 "${SDK_PKG_LIST}"; \
     else \
-      curl -fsSL https://docs.sima.ai/_static/tools/sima-cli-installer.sh | bash && \
-      ln -sf /root/.sima-cli/.venv/bin/sima-cli /usr/local/bin/sima-cli && \
       mkdir -p /opt/toolchain/aarch64/modalix/usr/include \
                /opt/toolchain/aarch64/modalix/usr/lib \
                /opt/toolchain/aarch64/modalix/usr/lib/pkgconfig \
@@ -109,6 +107,10 @@ RUN if [ "${MINIMAL_IMAGE}" != "1" ]; then \
                /opt/toolchain/aarch64/modalix/usr/lib/aarch64-linux-gnu/pkgconfig \
                /opt/toolchain/aarch64/modalix/usr/share/pkgconfig; \
     fi && \
+    curl -fsSL https://docs.sima.ai/_static/tools/sima-cli-installer.sh | bash && \
+    test -x /root/.sima-cli/.venv/bin/sima-cli && \
+    ln -sf /root/.sima-cli/.venv/bin/sima-cli /usr/local/bin/sima-cli && \
+    /usr/local/bin/sima-cli --help >/dev/null 2>&1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb /tmp/*
 
