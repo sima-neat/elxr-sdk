@@ -24,7 +24,7 @@ _DEVKIT_PORT="${3:-22}"
 _HOST_IP="${NFS_SERVER_HOST_IP:-}"
 _HOST_EXPORT_PATH="${DEVKIT_HOST_EXPORT_PATH:-}"
 _HOST_PLATFORM="${DEVKIT_HOST_PLATFORM:-linux}"
-_DEFAULT_MOUNT_PATH="${DEVKIT_SYNC_MOUNT_PATH:-/sdk-workspace}"
+_DEFAULT_MOUNT_PATH="${DEVKIT_SYNC_MOUNT_PATH:-/workspace}"
 
 if [[ -z "${_HOST_IP}" || -z "${_HOST_EXPORT_PATH}" ]]; then
   echo "Missing host export info in environment." >&2
