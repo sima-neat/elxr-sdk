@@ -2,9 +2,42 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYSROOT="${1:-/opt/toolchain/aarch64/modalix}"
 LIBDIR="${SYSROOT}/usr/lib/aarch64-linux-gnu"
-LINUX_LIBC_DEV_VERSION="${SDK_SYSROOT_LINUX_LIBC_DEV_VERSION:-6.1.22-modalix-827}"
+LINUX_LIBC_DEV_ARM64_VERSION="${SDK_SYSROOT_LINUX_LIBC_DEV_ARM64_VERSION:-${SDK_SYSROOT_LINUX_LIBC_DEV_VERSION:-}}"
+
+CONFIG_CANDIDATES=()
+if [[ -n "${SDK_SYSROOT_OVERLAY_CONFIG:-}" ]]; then
+  CONFIG_CANDIDATES+=("${SDK_SYSROOT_OVERLAY_CONFIG}")
+fi
+CONFIG_CANDIDATES+=(
+  "/usr/local/share/sima-sdk/sysroot-overlay.conf"
+  "${SCRIPT_DIR}/../config/sysroot-overlay.conf"
+)
+
+for config in "${CONFIG_CANDIDATES[@]}"; do
+  if [[ ! -f "${config}" ]]; then
+    continue
+  fi
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%%#*}"
+    if [[ "${line}" != *=* ]]; then
+      continue
+    fi
+    key="${line%%=*}"
+    value="${line#*=}"
+    case "${key}" in
+      linux_libc_dev_arm64_version)
+        if [[ -z "${LINUX_LIBC_DEV_ARM64_VERSION}" ]]; then
+          LINUX_LIBC_DEV_ARM64_VERSION="${value}"
+        fi
+        ;;
+    esac
+  done < "${config}"
+  break
+done
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: $(basename "$0") SYSROOT package[:arch] [package[:arch] ...]" >&2
@@ -29,6 +62,12 @@ if [[ ${#TARGET_ARCHES[@]} -eq 0 ]]; then
   TARGET_ARCHES=("$(dpkg --print-architecture)")
 fi
 
+if [[ " ${TARGET_ARCHES[*]} " == *" arm64 "* && -z "${LINUX_LIBC_DEV_ARM64_VERSION}" ]]; then
+  echo "Missing linux_libc_dev_arm64_version in sysroot overlay config" >&2
+  echo "Set SDK_SYSROOT_OVERLAY_CONFIG or SDK_SYSROOT_LINUX_LIBC_DEV_ARM64_VERSION." >&2
+  exit 1
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 
 workdir="$(mktemp -d)"
@@ -42,6 +81,10 @@ mkdir -p "${SYSROOT}" "${LIBDIR}" "${workdir}/archives" "${workdir}/linux-libc-d
 echo "Downloading sysroot overlay packages into ${SYSROOT}"
 printf '  %s\n' "${PACKAGES[@]}"
 
+# In cross builds, apt treats some packages as Multi-Arch: same and requires
+# the host and target architecture versions to match. Download the target
+# linux-libc-dev version that matches the installed host package here, then
+# replace the sysroot headers with the SDK-pinned version below.
 native_arch="$(dpkg --print-architecture)"
 if [[ " ${TARGET_ARCHES[*]} " != *" ${native_arch} "* ]] &&
    dpkg-query -W -f='${Status}' linux-libc-dev 2>/dev/null | grep -q "install ok installed"; then
@@ -59,6 +102,8 @@ apt-get install -y --download-only --no-install-recommends \
 find "${workdir}/archives" -maxdepth 1 -type f -name '*.deb' -print0 \
   | while IFS= read -r -d '' deb; do
       deb_arch="$(dpkg-deb -f "${deb}" Architecture)"
+      # Apt may download host-arch helper packages while solving target deps.
+      # Only target-arch and arch-independent payloads belong in this sysroot.
       if [[ "${deb_arch}" != "all" && " ${TARGET_ARCHES[*]} " != *" ${deb_arch} "* ]]; then
         echo "Skipping $(basename "${deb}") for architecture ${deb_arch}"
         continue
@@ -67,15 +112,18 @@ find "${workdir}/archives" -maxdepth 1 -type f -name '*.deb' -print0 \
       dpkg-deb -x "${deb}" "${SYSROOT}"
     done
 
+# The official Modalix 2.0 SDK sysroot uses SiMa's 6.1.22 arm64 UAPI headers.
+# Download this .deb directly so apt's multiarch resolver cannot reject it for
+# differing from the native amd64 linux-libc-dev package installed in the image.
 for arch in "${TARGET_ARCHES[@]}"; do
   if [[ "${arch}" != "arm64" ]]; then
     continue
   fi
 
-  echo "Downloading linux-libc-dev:${arch}=${LINUX_LIBC_DEV_VERSION} for final sysroot headers"
+  echo "Downloading linux-libc-dev:${arch}=${LINUX_LIBC_DEV_ARM64_VERSION} for final sysroot headers"
   (
     cd "${workdir}/linux-libc-dev"
-    apt-get download "linux-libc-dev:${arch}=${LINUX_LIBC_DEV_VERSION}"
+    apt-get download "linux-libc-dev:${arch}=${LINUX_LIBC_DEV_ARM64_VERSION}"
   )
 done
 

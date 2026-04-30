@@ -116,6 +116,7 @@ RUN if [ "${MINIMAL_IMAGE}" != "1" ]; then \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb /tmp/*
 
 COPY scripts/install-sysroot-overlay.sh /usr/local/bin/install-sysroot-overlay.sh
+COPY config/sysroot-overlay.conf /usr/local/share/sima-sdk/sysroot-overlay.conf
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY scripts/devkit.sh /usr/local/bin/devkit.sh
 RUN chmod 755 /usr/local/bin/install-sysroot-overlay.sh && \
