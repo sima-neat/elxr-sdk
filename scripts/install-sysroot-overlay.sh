@@ -76,7 +76,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${SYSROOT}" "${LIBDIR}" "${workdir}/archives" "${workdir}/linux-libc-dev"
+mkdir -p "${SYSROOT}" "${LIBDIR}" "${workdir}/archives/partial" "${workdir}/linux-libc-dev"
+
+# apt downloads as the sandbox user _apt. mktemp creates a 0700 root-owned
+# directory, so make only the download staging paths accessible to avoid
+# "Download is performed unsandboxed as root" warnings during Docker builds.
+chmod 755 "${workdir}" "${workdir}/archives" "${workdir}/archives/partial" "${workdir}/linux-libc-dev"
+if id _apt >/dev/null 2>&1; then
+  chown _apt "${workdir}/archives" "${workdir}/archives/partial" "${workdir}/linux-libc-dev"
+fi
 
 echo "Downloading sysroot overlay packages into ${SYSROOT}"
 printf '  %s\n' "${PACKAGES[@]}"
