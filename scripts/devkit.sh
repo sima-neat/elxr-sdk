@@ -24,6 +24,7 @@ check_devkit_sdk_version_compatibility() {
   local port="$3"
   local sdk_release="/etc/sdk-release"
   local devkit_distro_version=""
+  local sdk_expected_version=""
   local c_warn="" c_reset=""
 
   if [[ -t 2 ]]; then
@@ -65,11 +66,29 @@ EOS
     return 0
   fi
 
-  printf "%bWARNING: DevKit/SDK version mismatch.%b\n" "${c_warn}" "${c_reset}" >&2
-  printf "  DevKit DISTRO_VERSION: %s\n" "${devkit_distro_version}" >&2
-  printf "  SDK release file     : %s\n" "${sdk_release}" >&2
-  sed 's/^/    /' "${sdk_release}" >&2
-  printf "\nPlease update your DevKit to the matching version listed in %s, then reconnect.\n" "${sdk_release}" >&2
+  sdk_expected_version="$(
+    grep -E '^[[:space:]]*eLXr Version[[:space:]]*=' "${sdk_release}" \
+      | grep -Eo '[0-9]+([.][0-9]+){2}' \
+      | head -n1 || true
+  )"
+  if [[ -z "${sdk_expected_version}" ]]; then
+    sdk_expected_version="$(
+      grep -Eo '[0-9]+([.][0-9]+){2}' "${sdk_release}" \
+        | head -n1 || true
+    )"
+  fi
+
+  {
+    printf "%bWARNING: DevKit/SDK version mismatch.\n" "${c_warn}"
+    printf "  DevKit DISTRO_VERSION: %s\n" "${devkit_distro_version}"
+    printf "  SDK release file     : %s\n" "${sdk_release}"
+    sed 's/^/    /' "${sdk_release}"
+    if [[ -n "${sdk_expected_version}" ]]; then
+      printf "\nPlease update your DevKit to %s, then reconnect.%b\n" "${sdk_expected_version}" "${c_reset}"
+    else
+      printf "\nPlease update your DevKit to the matching version listed in %s, then reconnect.%b\n" "${sdk_release}" "${c_reset}"
+    fi
+  } >&2
   return 0
 }
 
