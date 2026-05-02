@@ -159,4 +159,8 @@ if [[ -e "${LIBDIR}/libopenblas.so.0" && ! -e "${LIBDIR}/libopenblas.so" ]]; the
   ln -sfn libopenblas.so.0 "${LIBDIR}/libopenblas.so"
 fi
 
+if [[ -d "${SYSROOT}/usr/include" ]]; then
+  chmod -R a+rX "${SYSROOT}/usr/include"
+fi
+
 echo "Sysroot overlay complete"

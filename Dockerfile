@@ -144,6 +144,7 @@ RUN chmod 755 /usr/local/bin/install-sysroot-overlay.sh && \
           overlay_pkgs+=("${pkg}:arm64"); \
         done; \
         /usr/local/bin/install-sysroot-overlay.sh /opt/toolchain/aarch64/modalix "${overlay_pkgs[@]}"'; \
+      chmod -R a+rX /opt/toolchain/aarch64/modalix/usr/include; \
     else \
       echo "Skipping sysroot overlay for minimal image build"; \
     fi
