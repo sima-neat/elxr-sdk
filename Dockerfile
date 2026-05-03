@@ -199,12 +199,13 @@ RUN printf 'SDK Version = 2.0.0_Palette_SDK_neat_%s_%s\neLXr Version = 2.0.0_rel
 
 WORKDIR /workspace
 
+# Preinstall Neat Framework and resources
 RUN --mount=type=secret,id=neat_github_pat \
     mkdir -p /neat-resources/core-extra /neat-resources/core-src /neat-resources/apps-src && \
-    wget -O /tmp/install-neat-from-a-branch.sh https://tools.modalix.info/install-neat-from-a-branch.sh && \
+    wget -O /tmp/install-neat.sh https://tools.sima-neat.com/install-neat.sh && \
     cd /neat-resources/core-extra && \
-    bash /tmp/install-neat-from-a-branch.sh --minimum "${NEAT_BRANCH}" "${NEAT_VERSION}" && \
-    rm -f /tmp/install-neat-from-a-branch.sh && \
+    bash /tmp/install-neat.sh --minimum "${NEAT_BRANCH}" "${NEAT_VERSION}" && \
+    rm -f /tmp/install-neat.sh && \
     find /neat-resources/core-extra -type f \
       \( -name '*.deb' -o -name '*.tar.gz' -o -name '*.whl' \) -delete && \
     if [ -f /run/secrets/neat_github_pat ] && [ -s /run/secrets/neat_github_pat ]; then \
