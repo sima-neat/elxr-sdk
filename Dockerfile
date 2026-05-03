@@ -150,7 +150,8 @@ RUN chmod 755 /usr/local/bin/install-sysroot-overlay.sh && \
       echo "Skipping sysroot overlay for minimal image build"; \
     fi
 
-RUN /usr/local/bin/insight-admin update "${NEAT_INSIGHT_BRANCH}" "${NEAT_INSIGHT_VERSION}"
+RUN /usr/local/bin/insight-admin update "${NEAT_INSIGHT_BRANCH}" "${NEAT_INSIGHT_VERSION}" && \
+    chmod -R a+rwX "${NEAT_INSIGHT_VENV_DIR}"
 
 RUN cat > /etc/profile.d/neat-sdk-prompt.sh <<'EOF'
 #!/usr/bin/env bash
